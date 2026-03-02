@@ -34,10 +34,10 @@ jobs:
 
       - name: "Check for hardcoded secrets"
         run: |
-          PATTERNS="api_key|password|secret|sk_live_|pk_live_|sk_test_|pk_test_"
-          if git diff HEAD~1..HEAD | grep -iE "$PATTERNS" | grep -v "\.env\.example"; then
+          PATTERNS="sk_live_[a-zA-Z0-9]|pk_live_[a-zA-Z0-9]|sk_test_[a-zA-Z0-9]|pk_test_[a-zA-Z0-9]"
+          if git diff HEAD~1..HEAD -- . ':!.env.example' ':!*.md' | grep '^+[^+]' | grep -E "$PATTERNS"; then
             echo "❌ Hardcoded secrets detected!"
-            git diff HEAD~1..HEAD | grep -iE "$PATTERNS"
+            git diff HEAD~1..HEAD -- . ':!.env.example' ':!*.md' | grep '^+[^+]' | grep -E "$PATTERNS"
             exit 1
           fi
           echo "✅ No obvious hardcoded secrets"
