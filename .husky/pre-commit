@@ -1,0 +1,47 @@
+#!/bin/sh
+# Husky pre-commit hook
+# Prevents committing secrets and sensitive files
+
+set -e
+
+echo "🔍 Pre-commit security scan..."
+echo ""
+
+# Check for .env files being committed
+if git diff --cached --name-only | grep -E '\.env' | grep -v '\.env\.example'; then
+    echo "❌ ERROR: .env file staged! This will expose secrets!"
+    echo ""
+    echo "Run:"
+    echo "  git reset HEAD .env*"
+    echo "  git checkout .env*"
+    exit 1
+fi
+
+# Check for common secret patterns in staged code
+SECRET_PATTERNS="api_key|password|secret|sk_live_|pk_live_|sk_test_|pk_test_|stripe_|supabase_"
+
+if git diff --cached | grep -iE "$SECRET_PATTERNS" | grep -v "\.env\.example" | grep -v "NEXT_PUBLIC_"; then
+    echo "❌ ERROR: Possible secrets detected in code!"
+    echo ""
+    echo "Review with: git diff --cached"
+    echo "If false positive, update .husky/pre-commit"
+    exit 1
+fi
+
+# Check for private business data
+if git diff --cached | grep -iE "revenue|profit|margin|cost.*actual|internal.*strategy"; then
+    echo "⚠️  WARNING: Possible private business data detected"
+    echo ""
+    echo "Review: git diff --cached"
+    echo "If intentional, remove from commits"
+    exit 1
+fi
+
+# Ensure .gitignore is up to date
+if ! grep -q "\.env" .gitignore; then
+    echo "❌ ERROR: .gitignore missing .env pattern!"
+    exit 1
+fi
+
+echo "✅ Pre-commit checks passed"
+echo ""

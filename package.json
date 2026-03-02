@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "test": "jest",
     "benchmark:run": "node src/benchmark.js",
-    "benchmark:publish": "node src/publish.js"
+    "benchmark:publish": "node src/publish.js",
+    "validate-security": "bash scripts/validate-security.sh",
+    "prepare": "husky install"
   },
   "keywords": [
     "llm",
@@ -35,6 +37,7 @@
   "devDependencies": {
     "jest": "^29.0.0",
     "eslint": "^8.0.0",
-    "@testing-library/react": "^15.0.0"
+    "@testing-library/react": "^15.0.0",
+    "husky": "^8.0.0"
   }
 }

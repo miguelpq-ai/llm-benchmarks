@@ -123,6 +123,19 @@ The cron endpoint should:
 
 ---
 
+## 🔒 SECURITY FIRST
+
+**BEFORE every Claude Code session:**
+1. Read SECURITY.md in this repo
+2. Remember: This is PUBLIC. Don't commit:
+   - API keys, tokens, credentials
+   - Private business data
+   - Personal information
+3. Use `.env.local` for secrets (never commit)
+4. Use `.env.example` as template (safe to commit)
+
+---
+
 ## 🛠️ How to Start Each Task
 
 ### Option A: Use OpenClaw CLI (Recommended)

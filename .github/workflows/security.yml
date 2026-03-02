@@ -1,0 +1,127 @@
+name: Security Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  secrets:
+    name: "🔒 Scan for Secrets"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: "Scan with TruffleHog"
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug
+
+      - name: "Check for .env files"
+        run: |
+          if git ls-files | grep -E '\.env(\..*)?$' | grep -v '\.env\.example'; then
+            echo "❌ ERROR: .env files detected in repo!"
+            git ls-files | grep -E '\.env(\..*)?$' | grep -v '\.env\.example'
+            exit 1
+          fi
+          echo "✅ No .env files in repo"
+
+      - name: "Check for hardcoded secrets"
+        run: |
+          PATTERNS="api_key|password|secret|sk_live_|pk_live_|sk_test_|pk_test_"
+          if git diff HEAD~1..HEAD | grep -iE "$PATTERNS" | grep -v "\.env\.example"; then
+            echo "❌ Hardcoded secrets detected!"
+            git diff HEAD~1..HEAD | grep -iE "$PATTERNS"
+            exit 1
+          fi
+          echo "✅ No obvious hardcoded secrets"
+
+  dependencies:
+    name: "📦 Check Dependencies"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: "Install dependencies"
+        run: npm ci --audit
+
+      - name: "Audit for vulnerabilities"
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: "Check for outdated packages"
+        run: npm outdated || true
+
+  lint:
+    name: "🎨 Code Quality"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - run: npm ci
+
+      - name: "Lint JavaScript"
+        run: npm run lint || echo "No linter configured yet"
+        continue-on-error: true
+
+      - name: "Check for console logs in production code"
+        run: |
+          if grep -r "console\.\(log\|error\|warn\)" src/ api/ --include="*.js" | grep -v "test"; then
+            echo "⚠️  WARNING: console statements found in production code"
+            grep -r "console\.\(log\|error\|warn\)" src/ api/ --include="*.js" || true
+          fi
+        continue-on-error: true
+
+  docs:
+    name: "📚 Documentation Security"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: "Check for exposed credentials in docs"
+        run: |
+          PATTERNS="sk_live_|pk_live_|sk_test_|pk_test_|api_key.*=.*[a-zA-Z0-9]"
+          if grep -r -E "$PATTERNS" *.md docs/ --include="*.md" 2>/dev/null | grep -v "NEXT_PUBLIC_\|YOUR_\|your_"; then
+            echo "❌ Possible credentials in documentation!"
+            exit 1
+          fi
+          echo "✅ Documentation looks safe"
+        continue-on-error: true
+
+      - name: "Verify .env.example doesn't have real values"
+        run: |
+          if grep -E "sk_live_|pk_live_|sk_test_|pk_test_" .env.example; then
+            echo "❌ ERROR: Real credentials in .env.example!"
+            exit 1
+          fi
+          echo "✅ .env.example has placeholder values only"
+
+  summary:
+    name: "📊 Security Summary"
+    runs-on: ubuntu-latest
+    needs: [secrets, dependencies, lint, docs]
+    if: always()
+    steps:
+      - name: "Check results"
+        run: |
+          echo "✅ All security checks completed"
+          echo ""
+          echo "Summary:"
+          echo "- Secrets scan: ${{ needs.secrets.result }}"
+          echo "- Dependencies: ${{ needs.dependencies.result }}"
+          echo "- Code quality: ${{ needs.lint.result }}"
+          echo "- Documentation: ${{ needs.docs.result }}"
