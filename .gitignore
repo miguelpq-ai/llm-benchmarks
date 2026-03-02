@@ -1,18 +1,69 @@
+# Dependencies
 node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment variables (NEVER commit secrets)
+.env
 .env.local
 .env.*.local
+.env.production
+.env.*.production
+
+# Build outputs
 .next/
 out/
 dist/
-.DS_Store
-*.log
-npm-debug.log*
-yarn-debug.log*
+build/
+.turbo/
+
+# Testing
+coverage/
+.nyc_output/
+
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-.env
-.env.production
-coverage/
+*.iml
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+lerna-debug.log*
+
+# Cache
 .cache/
+.eslintcache
+.node_repl_history
+*.tsbuildinfo
+
+# OS
+Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets (extra safe)
+secrets/
+.secrets/
+*.pem
+*.key
+*.crt
+
+# Credentials
+credentials.json
+private/
+sensitive/
