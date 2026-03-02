@@ -119,9 +119,8 @@ npm install        # Husky auto-installs via "prepare" script
 
 #### 3. Hardcoded Secrets
 - Scans code for patterns:
-  - `sk_live_`, `pk_live_`
-  - `api_key=`, `password=`
-  - `secret=`, `token=`
+  - Stripe key prefixes (live/test variants)
+  - Credential assignment patterns (api_key, password, etc.)
 - Blocks if detected
 
 #### 4. Dependency Audit
@@ -267,7 +266,7 @@ Shows ❌ on PR
 
 ### Issue: You accidentally committed secret
 ```bash
-git log -S "api_key=sk_live"  # Find it
+git log -S "your_credential_pattern"  # Find it
 ```
 
 **Solution:**

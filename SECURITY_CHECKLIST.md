@@ -64,12 +64,12 @@ Before committing `.md` files:
 
 Example ✅ SAFE:
 ```markdown
-Set your API key: `STRIPE_KEY=sk_test_your_key_here`
+Set your API key: `STRIPE_KEY=your_key_here`
 ```
 
 Example ❌ UNSAFE:
 ```markdown
-Use this key: `sk_live_abc123xyz...`
+Use this key: `your_api_key_here`
 ```
 
 ---

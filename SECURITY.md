@@ -38,7 +38,7 @@ git status
 ✅ **DO THIS:**
 ```env
 # .env.local (NEVER commit)
-STRIPE_SECRET_KEY=sk_live_actual_key_here
+STRIPE_SECRET_KEY=your_actual_stripe_key_here
 SUPABASE_URL=https://actual.supabase.co
 ```
 
@@ -73,7 +73,7 @@ const markup = 5.0;
 
 ❌ **UNSAFE:** Show real credentials
 ```markdown
-API Key: sk_live_abc123xyz...
+API Key: your_api_key_here
 ```
 
 ---

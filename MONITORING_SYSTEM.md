@@ -96,7 +96,7 @@ Fix errors before committing
 
 3. **Hardcoded secrets**
    - Scans all code for patterns
-   - `sk_live_`, `pk_live_`, `api_key=`, etc
+   - Stripe key prefixes, credential patterns, etc
    - Blocks merge if found
 
 4. **Dependency audit**

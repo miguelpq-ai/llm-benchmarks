@@ -242,7 +242,7 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 
 export default async function handler(req, res) {
   // Verify cron secret token
-  if (req.headers['authorization'] !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (req.headers['authorization'] !== `Bearer ${process.env.CRON_AUTH_TOKEN}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
