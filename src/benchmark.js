@@ -1,9 +1,11 @@
 /**
  * LLM Benchmark Runner
  * Collects real-time latency, throughput, and cost data from multiple providers
+ * Persists data to SQLite database
  */
 
 const axios = require('axios');
+const Database = require('./db');
 
 const MODELS = {
   claude: [
@@ -25,9 +27,14 @@ const RSS_FEEDS = {
 };
 
 class BenchmarkRunner {
-  constructor() {
+  constructor(dbPath = './data/benchmarks.db') {
     this.results = [];
     this.lastUpdated = null;
+    this.db = new Database(dbPath);
+  }
+
+  async initDatabase() {
+    await this.db.init();
   }
 
   async collectLatencyData() {
@@ -128,14 +135,63 @@ class BenchmarkRunner {
   async run() {
     console.log('\n🚀 Running LLM Benchmarks...\n');
     
+    // Initialize database
+    await this.initDatabase();
+    
     await this.collectLatencyData();
     await this.collectCostData();
     
     const results = this.formatResults();
     this.lastUpdated = results.timestamp;
     
+    // Save results to database
+    await this.saveResultsToDatabase(results);
+    
     console.log('\n✅ Benchmarks complete');
     return results;
+  }
+
+  async saveResultsToDatabase(results) {
+    try {
+      for (const model of results.models) {
+        // Add/update model
+        this.db.addModel({
+          id: model.provider + '/' + model.name.toLowerCase().replace(/\s+/g, '-'),
+          name: model.name,
+          provider: model.provider
+        });
+
+        // Add latency benchmark
+        this.db.addBenchmark(
+          model.provider + '/' + model.name.toLowerCase().replace(/\s+/g, '-'),
+          'latency',
+          model.ttft_ms,
+          'ms',
+          'benchmark-runner'
+        );
+
+        // Add throughput benchmark
+        this.db.addBenchmark(
+          model.provider + '/' + model.name.toLowerCase().replace(/\s+/g, '-'),
+          'throughput',
+          model.throughput_tps,
+          'tokens/sec',
+          'benchmark-runner'
+        );
+
+        // Add pricing
+        this.db.addPricing(
+          model.provider + '/' + model.name.toLowerCase().replace(/\s+/g, '-'),
+          model.provider,
+          model.cost_input_1m,
+          model.cost_output_1m,
+          new Date().toISOString().split('T')[0]
+        );
+      }
+      console.log('✅ Results saved to database');
+    } catch (error) {
+      console.error('Error saving to database:', error.message);
+    }
   }
 }
 
@@ -146,5 +202,10 @@ if (require.main === module) {
   const runner = new BenchmarkRunner();
   runner.run().then(results => {
     console.log(JSON.stringify(results, null, 2));
+    runner.db.close();
+  }).catch(error => {
+    console.error('Fatal error:', error);
+    runner.db.close();
+    process.exit(1);
   });
 }

@@ -6,6 +6,7 @@
 - [x] GitHub repo setup
 - [x] Core architecture design
 - [x] Benchmark runner scaffold
+- [ ] **Database setup** (SQLite + migrations)
 - [ ] **Integrate LMSYS RSS parser**
 - [ ] **Integrate pricing data sources**
 - [ ] Test benchmark collection
@@ -44,17 +45,24 @@
 
 ## Current Priorities
 
-1. **URGENT:** Get benchmark data pipeline working
+1. **URGENT:** Database foundation
+   - SQLite schema for models, benchmarks, pricing
+   - Migration system (sql files in `/db/migrations`)
+   - Connection pooling in benchmark runner
+
+2. **URGENT:** Get benchmark data pipeline working
    - Parse LMSYS RSS reliably
    - Fetch real pricing from providers
+   - Store results in DB, not memory
    - Test data freshness
 
-2. **HIGH:** Dashboard MVP
+3. **HIGH:** Dashboard MVP
    - Show top 5 models by latency
    - Cost comparison table
+   - Query data from DB
    - Last updated timestamp
 
-3. **MEDIUM:** API design
+4. **MEDIUM:** API design
    - Define request/response schemas
    - Rate limiting strategy
    - Error handling
@@ -68,7 +76,9 @@
 
 ## Known Issues & TODOs
 
-- [ ] LMSYS RSS parsing needs XML parser
+- [ ] **Database schema design & migrations needed**
+- [ ] LMSYS RSS parsing needs XML parser + DB writes
+- [ ] Data persistence strategy (currently in-memory)
 - [ ] Rate limiting not yet implemented
 - [ ] Stripe API not integrated
 - [ ] No user authentication yet
