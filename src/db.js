@@ -113,7 +113,10 @@ class Database {
         p.price_per_1m_input, p.price_per_1m_output
       FROM models m
       LEFT JOIN benchmarks b ON m.id = b.model_id AND b.metric_type = ?
-      LEFT JOIN pricing p ON m.id = p.model_id AND p.effective_date = CURRENT_DATE
+      LEFT JOIN pricing p ON m.id = p.model_id
+        AND p.effective_date = (
+          SELECT MAX(effective_date) FROM pricing WHERE model_id = m.id
+        )
       WHERE b.measured_at = (
         SELECT MAX(measured_at) FROM benchmarks 
         WHERE model_id = m.id AND metric_type = ?
@@ -152,14 +155,18 @@ class Database {
    * Update feed's last_fetched timestamp
    */
   updateFeedStatus(feedName, status = 'active') {
-    const stmt = this.db.prepare(`
-      INSERT OR IGNORE INTO feeds (name, url, status)
-      VALUES (?, '', ?)
-      UNION ALL
-      UPDATE feeds SET last_fetched = CURRENT_TIMESTAMP, status = ?
-      WHERE name = ?
-    `);
-    return stmt.run(feedName, status, status, feedName);
+    const upsert = this.db.transaction((name, st) => {
+      this.db.prepare(`
+        INSERT OR IGNORE INTO feeds (name, url, status)
+        VALUES (?, '', ?)
+      `).run(name, st);
+
+      this.db.prepare(`
+        UPDATE feeds SET last_fetched = CURRENT_TIMESTAMP, status = ?
+        WHERE name = ?
+      `).run(st, name);
+    });
+    return upsert(feedName, status);
   }
 
   /**
