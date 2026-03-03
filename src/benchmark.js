@@ -13,22 +13,26 @@ const Database = require('./db');
 const DATA_PATH = path.join(process.cwd(), 'src', 'data', 'models.json');
 
 const MODELS = {
-  claude: [
-    { name: 'Claude 3.5 Sonnet', provider: 'anthropic', id: 'claude-3-5-sonnet-20241022' },
-    { name: 'Claude 3 Opus', provider: 'anthropic', id: 'claude-3-opus-20240229' }
-  ],
-  qwen: [
-    { name: 'Qwen2.5 72B', provider: 'together', id: 'qwen/qwen-2.5-72b-instruct' }
-  ],
-  deepseek: [
-    { name: 'DeepSeek-V3', provider: 'deepseek', id: 'deepseek-chat' }
+  anthropic: [
+    { name: 'Claude Sonnet 4', provider: 'anthropic', id: 'claude-sonnet-4-20250514' },
+    { name: 'Claude Opus 4', provider: 'anthropic', id: 'claude-opus-4-20250514' }
   ],
   openai: [
-    { name: 'GPT-4o', provider: 'openai', id: 'gpt-4o' },
-    { name: 'GPT-4o mini', provider: 'openai', id: 'gpt-4o-mini' }
+    { name: 'GPT-4.1', provider: 'openai', id: 'gpt-4.1' },
+    { name: 'GPT-4.1 mini', provider: 'openai', id: 'gpt-4.1-mini' },
+    { name: 'o4-mini', provider: 'openai', id: 'o4-mini' }
   ],
   google: [
-    { name: 'Gemini 1.5 Pro', provider: 'google', id: 'gemini-1.5-pro' }
+    { name: 'Gemini 2.5 Pro', provider: 'google', id: 'gemini-2.5-pro' },
+    { name: 'Gemini 2.5 Flash', provider: 'google', id: 'gemini-2.5-flash' }
+  ],
+  deepseek: [
+    { name: 'DeepSeek-V3', provider: 'deepseek', id: 'deepseek-chat' },
+    { name: 'DeepSeek-R1', provider: 'deepseek', id: 'deepseek-reasoner' }
+  ],
+  together: [
+    { name: 'Qwen3 235B', provider: 'together', id: 'Qwen/Qwen3-235B-A22B-FP8' },
+    { name: 'Llama 4 Maverick', provider: 'together', id: 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8' }
   ]
 };
 
@@ -40,13 +44,20 @@ const RSS_FEEDS = {
 
 // Known model name patterns for RSS article matching
 const MODEL_PATTERNS = [
-  { pattern: /claude/i, model: 'Claude 3.5 Sonnet' },
-  { pattern: /qwen/i, model: 'Qwen2.5 72B' },
+  { pattern: /claude.*sonnet/i, model: 'Claude Sonnet 4' },
+  { pattern: /claude.*opus/i, model: 'Claude Opus 4' },
+  { pattern: /claude/i, model: 'Claude Sonnet 4' },
+  { pattern: /gpt-?4\.1\b/i, model: 'GPT-4.1' },
+  { pattern: /o4-?mini/i, model: 'o4-mini' },
+  { pattern: /gemini.*2\.5.*pro/i, model: 'Gemini 2.5 Pro' },
+  { pattern: /gemini.*2\.5.*flash/i, model: 'Gemini 2.5 Flash' },
+  { pattern: /gemini/i, model: 'Gemini 2.5 Pro' },
+  { pattern: /deepseek.*r1/i, model: 'DeepSeek-R1' },
   { pattern: /deepseek/i, model: 'DeepSeek-V3' },
-  { pattern: /gpt-?4o\b/i, model: 'GPT-4o' },
-  { pattern: /gemini/i, model: 'Gemini 1.5 Pro' },
-  { pattern: /llama/i, model: 'Llama' },
-  { pattern: /mistral/i, model: 'Mistral' }
+  { pattern: /qwen3/i, model: 'Qwen3 235B' },
+  { pattern: /qwen/i, model: 'Qwen3 235B' },
+  { pattern: /llama.*4/i, model: 'Llama 4 Maverick' },
+  { pattern: /llama/i, model: 'Llama 4 Maverick' }
 ];
 
 class BenchmarkRunner {
@@ -130,17 +141,66 @@ class BenchmarkRunner {
   async collectCostData() {
     console.log('Collecting cost data...');
 
-    const costs = {
-      'Claude 3.5 Sonnet': { input: 3, output: 15 },
-      'Claude 3 Opus': { input: 15, output: 75 },
-      'Qwen2.5 72B': { input: 0.14, output: 0.28 },
-      'DeepSeek-V3': { input: 0.27, output: 1.1 },
-      'GPT-4o': { input: 2.5, output: 10 },
-      'GPT-4o mini': { input: 0.15, output: 0.6 },
-      'Gemini 1.5 Pro': { input: 1.25, output: 5 }
-    };
+    // Try fetching live pricing from LiteLLM's maintained pricing database
+    try {
+      const response = await axios.get(
+        'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json',
+        { timeout: 10000 }
+      );
+      const litellmPricing = response.data;
+      const costs = {};
 
-    return costs;
+      // Map our model IDs to LiteLLM pricing keys
+      const litellmKeyMap = {
+        'Claude Sonnet 4': 'claude-sonnet-4-20250514',
+        'Claude Opus 4': 'claude-opus-4-20250514',
+        'GPT-4.1': 'gpt-4.1',
+        'GPT-4.1 mini': 'gpt-4.1-mini',
+        'o4-mini': 'o4-mini',
+        'Gemini 2.5 Pro': 'gemini/gemini-2.5-pro',
+        'Gemini 2.5 Flash': 'gemini/gemini-2.5-flash',
+        'DeepSeek-V3': 'deepseek/deepseek-chat',
+        'DeepSeek-R1': 'deepseek/deepseek-reasoner',
+        'Qwen3 235B': 'together_ai/Qwen/Qwen3-235B-A22B-FP8',
+        'Llama 4 Maverick': 'together_ai/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8'
+      };
+
+      for (const [modelName, litellmKey] of Object.entries(litellmKeyMap)) {
+        const pricing = litellmPricing[litellmKey];
+        if (pricing && pricing.input_cost_per_token && pricing.output_cost_per_token) {
+          costs[modelName] = {
+            input: pricing.input_cost_per_token * 1_000_000,
+            output: pricing.output_cost_per_token * 1_000_000
+          };
+        }
+      }
+
+      if (Object.keys(costs).length > 0) {
+        console.log(`Fetched live pricing for ${Object.keys(costs).length} models from LiteLLM`);
+        // Merge with fallback for any missing models
+        return { ...this._getFallbackCosts(), ...costs };
+      }
+    } catch (error) {
+      console.warn('Could not fetch live pricing, using fallback:', error.message);
+    }
+
+    return this._getFallbackCosts();
+  }
+
+  _getFallbackCosts() {
+    return {
+      'Claude Sonnet 4': { input: 3, output: 15 },
+      'Claude Opus 4': { input: 15, output: 75 },
+      'GPT-4.1': { input: 2, output: 8 },
+      'GPT-4.1 mini': { input: 0.4, output: 1.6 },
+      'o4-mini': { input: 1.1, output: 4.4 },
+      'Gemini 2.5 Pro': { input: 1.25, output: 10 },
+      'Gemini 2.5 Flash': { input: 0.3, output: 2.5 },
+      'DeepSeek-V3': { input: 0.14, output: 0.28 },
+      'DeepSeek-R1': { input: 0.55, output: 2.19 },
+      'Qwen3 235B': { input: 0.2, output: 0.6 },
+      'Llama 4 Maverick': { input: 0.27, output: 0.85 }
+    };
   }
 
   formatResults() {
@@ -169,6 +229,17 @@ class BenchmarkRunner {
 
     // Update timestamp
     data.timestamp = new Date().toISOString();
+
+    // Apply collected cost data to models
+    if (this.costs) {
+      for (const model of data.models) {
+        const cost = this.costs[model.name];
+        if (cost) {
+          model.cost_input_1m = cost.input;
+          model.cost_output_1m = cost.output;
+        }
+      }
+    }
 
     // Attach recent article mentions to models
     for (const model of data.models) {
@@ -201,7 +272,7 @@ class BenchmarkRunner {
     await this.initDatabase();
 
     await this.collectLatencyData();
-    await this.collectCostData();
+    this.costs = await this.collectCostData();
 
     const results = this.formatResults();
     this.lastUpdated = results.timestamp;

@@ -1,32 +1,34 @@
 # Roadmap - LLM Benchmarks
 
-## Phase 1: MVP (Weeks 1-2) - IN PROGRESS
+## Phase 1: MVP (Weeks 1-2)
 
-### Week 1
+### Week 1 - DONE
 - [x] GitHub repo setup
 - [x] Core architecture design
 - [x] Benchmark runner scaffold
-- [ ] **Database setup** (SQLite + migrations)
-- [ ] **Integrate LMSYS RSS parser**
-- [ ] **Integrate pricing data sources**
-- [ ] Test benchmark collection
+- [x] Database setup (SQLite + migrations)
+- [x] LMSYS RSS parser integration
+- [x] Pricing data (hardcoded fallback + LiteLLM live fetch)
+- [x] Next.js dashboard with charts and comparison table
+- [x] API endpoints (`/api/v1/models`, `/api/v1/best-model`)
+- [x] Cron endpoint for scheduled updates
+- [x] Model list updated to current models (Claude 4, GPT-4.1, Gemini 2.5, etc.)
 
-### Week 2
-- [ ] Next.js setup
-- [ ] Dashboard skeleton
-- [ ] Data visualization (Recharts)
+### Week 2 - IN PROGRESS
+- [ ] Real latency measurement (send prompts to provider APIs, measure TTFT)
 - [ ] Deploy to Vercel
+- [ ] Replace better-sqlite3 with Vercel-compatible storage
+- [ ] Fix cron data flow for serverless (read-only filesystem)
+- [ ] Add test coverage
 - [ ] Public dashboard live
 
 ## Phase 2: API & Monetization (Weeks 3-4)
 
 ### Week 3
-- [ ] API v1 endpoints
-  - [ ] `/api/v1/models` (list all)
-  - [ ] `/api/v1/best-model` (recommend)
-  - [ ] `/api/v1/compare` (compare models)
 - [ ] API docs (Swagger/OpenAPI)
 - [ ] Rate limiting
+- [ ] API input validation
+- [ ] `/api/v1/compare` endpoint
 
 ### Week 4
 - [ ] Stripe integration
@@ -37,7 +39,7 @@
 ## Phase 3: Polish & Growth (Weeks 5+)
 
 - [ ] Webhooks for alerts
-- [ ] Historical data retention
+- [ ] Historical data trending charts
 - [ ] Advanced filtering
 - [ ] Admin dashboard
 - [ ] Email notifications
@@ -45,27 +47,25 @@
 
 ## Current Priorities
 
-1. **URGENT:** Database foundation
-   - SQLite schema for models, benchmarks, pricing
-   - Migration system (sql files in `/db/migrations`)
-   - Connection pooling in benchmark runner
+1. **URGENT:** Real latency measurement
+   - Send standardized prompts to provider APIs
+   - Measure TTFT and throughput via streaming
+   - Replace static seed data with actual measurements
 
-2. **URGENT:** Get benchmark data pipeline working
-   - Parse LMSYS RSS reliably
-   - Fetch real pricing from providers
-   - Store results in DB, not memory
-   - Test data freshness
+2. **URGENT:** Vercel deployment
+   - Replace better-sqlite3 (native addon incompatible with serverless)
+   - Fix cron to write to remote storage instead of filesystem
+   - Fix ISR data flow for `getStaticProps`
 
-3. **HIGH:** Dashboard MVP
-   - Show top 5 models by latency
-   - Cost comparison table
-   - Query data from DB
-   - Last updated timestamp
+3. **HIGH:** Test coverage
+   - Benchmark runner tests (RSS parsing, model matching, formatResults)
+   - Database CRUD tests
+   - API endpoint tests
 
-4. **MEDIUM:** API design
-   - Define request/response schemas
-   - Rate limiting strategy
-   - Error handling
+4. **MEDIUM:** API hardening
+   - Input validation on query parameters
+   - Rate limiting
+   - ESLint configuration
 
 ## Success Metrics
 
@@ -76,10 +76,11 @@
 
 ## Known Issues & TODOs
 
-- [ ] **Database schema design & migrations needed**
-- [ ] LMSYS RSS parsing needs XML parser + DB writes
-- [ ] Data persistence strategy (currently in-memory)
+- [ ] TTFT/throughput values are placeholder estimates, not measured
+- [ ] better-sqlite3 incompatible with Vercel serverless
+- [ ] Cron writes to read-only filesystem on Vercel
 - [ ] Rate limiting not yet implemented
 - [ ] Stripe API not integrated
 - [ ] No user authentication yet
 - [ ] API documentation incomplete
+- [ ] Zero test coverage
