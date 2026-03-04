@@ -1,4 +1,7 @@
 const ModelsAPI = require('../../../api/models');
+const { validateSort, validateLimit, ValidationError } = require('../../../src/validate');
+const { rateLimit } = require('../../../src/rate-limit');
+const { authenticateApiKey } = require('../../../src/api-auth');
 
 const api = new ModelsAPI();
 
@@ -7,10 +10,23 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  await api.getBenchmarks();
+  const auth = await authenticateApiKey(req, res);
+  if (!auth) return; // invalid key — response already sent
 
-  const sort = req.query.sort || 'latency';
-  const limit = parseInt(req.query.limit) || 10;
+  if (!rateLimit(req, res, auth.rateLimit)) return;
+
+  let sort, limit;
+  try {
+    sort = validateSort(req.query.sort);
+    limit = validateLimit(req.query.limit);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
+  }
+
+  await api.getBenchmarks();
   const models = api.getModelsRanked(sort, limit);
 
   res.status(200).json({ models });

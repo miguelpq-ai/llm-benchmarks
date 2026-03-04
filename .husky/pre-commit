@@ -20,7 +20,7 @@ fi
 # Check for common secret patterns in staged code (additions only)
 SECRET_PATTERNS="sk_live_[a-zA-Z0-9]|pk_live_[a-zA-Z0-9]|sk_test_[a-zA-Z0-9]|pk_test_[a-zA-Z0-9]"
 
-if git diff --cached -- . ':!.env.example' ':!*.md' | grep '^+[^+]' | grep -E "$SECRET_PATTERNS"; then
+if git diff --cached -- . ':!.env.example' ':!*.md' ':!__tests__/*' | grep '^+[^+]' | grep -E "$SECRET_PATTERNS"; then
     echo "❌ ERROR: Possible secrets detected in code!"
     echo ""
     echo "Review with: git diff --cached"

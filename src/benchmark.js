@@ -60,10 +60,21 @@ const MODEL_PATTERNS = [
   { pattern: /llama/i, model: 'Llama 4 Maverick' }
 ];
 
+const BENCHMARK_PROMPT = "Say exactly: 'pong'";
+const API_KEY_MAP = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  google: 'GOOGLE_AI_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  together: 'TOGETHER_API_KEY'
+};
+
 class BenchmarkRunner {
   constructor(dbPath = './data/benchmarks.db') {
     this.results = [];
     this.articleMentions = [];
+    this.latencyMeasurements = {};
+    this.costs = null;
     this.lastUpdated = null;
     this.db = new Database(dbPath);
   }
@@ -72,9 +83,8 @@ class BenchmarkRunner {
     await this.db.init();
   }
 
-  /**
-   * Parse an RSS feed URL and return article metadata
-   */
+  // ─── RSS Feed Parsing ───────────────────────────────────────────────
+
   async parseRSSFeed(url) {
     try {
       const response = await axios.get(url, { timeout: 5000 });
@@ -98,9 +108,6 @@ class BenchmarkRunner {
     }
   }
 
-  /**
-   * Scan articles for model name mentions and return matches
-   */
   extractArticleMentions(articles) {
     const mentions = [];
 
@@ -121,20 +128,252 @@ class BenchmarkRunner {
     return mentions;
   }
 
+  // ─── Real Latency Measurement ──────────────────────────────────────
+
+  async measureModelLatency(provider, modelId) {
+    const apiKeyVar = API_KEY_MAP[provider];
+    if (!apiKeyVar || !process.env[apiKeyVar]) {
+      return null;
+    }
+
+    const start = Date.now();
+
+    try {
+      switch (provider) {
+        case 'anthropic':
+          return await this._measureAnthropic(modelId, start);
+        case 'openai':
+          return await this._measureOpenAI(modelId, start);
+        case 'google':
+          return await this._measureGoogle(modelId, start);
+        case 'deepseek':
+          return await this._measureDeepSeek(modelId, start);
+        case 'together':
+          return await this._measureTogether(modelId, start);
+        default:
+          return null;
+      }
+    } catch (err) {
+      console.warn(`Could not measure ${provider}/${modelId}: ${err.message}`);
+      return null;
+    }
+  }
+
+  async _measureAnthropic(modelId, start) {
+    const response = await axios.post(
+      'https://api.anthropic.com/v1/messages',
+      {
+        model: modelId,
+        max_tokens: 50,
+        stream: true,
+        messages: [{ role: 'user', content: BENCHMARK_PROMPT }]
+      },
+      {
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json'
+        },
+        responseType: 'stream',
+        timeout: 30000
+      }
+    );
+    return this._parseSSEStream(response.data, start);
+  }
+
+  async _measureOpenAI(modelId, start) {
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: modelId,
+        max_tokens: 50,
+        stream: true,
+        messages: [{ role: 'user', content: BENCHMARK_PROMPT }]
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'content-type': 'application/json'
+        },
+        responseType: 'stream',
+        timeout: 30000
+      }
+    );
+    return this._parseSSEStream(response.data, start);
+  }
+
+  async _measureGoogle(modelId, start) {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?alt=sse&key=${process.env.GOOGLE_AI_API_KEY}`,
+      {
+        contents: [{ role: 'user', parts: [{ text: BENCHMARK_PROMPT }] }],
+        generationConfig: { maxOutputTokens: 50 }
+      },
+      {
+        headers: { 'content-type': 'application/json' },
+        responseType: 'stream',
+        timeout: 30000
+      }
+    );
+    return this._parseSSEStream(response.data, start);
+  }
+
+  async _measureDeepSeek(modelId, start) {
+    const response = await axios.post(
+      'https://api.deepseek.com/chat/completions',
+      {
+        model: modelId,
+        max_tokens: 50,
+        stream: true,
+        messages: [{ role: 'user', content: BENCHMARK_PROMPT }]
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+          'content-type': 'application/json'
+        },
+        responseType: 'stream',
+        timeout: 30000
+      }
+    );
+    return this._parseSSEStream(response.data, start);
+  }
+
+  async _measureTogether(modelId, start) {
+    const response = await axios.post(
+      'https://api.together.xyz/v1/chat/completions',
+      {
+        model: modelId,
+        max_tokens: 50,
+        stream: true,
+        messages: [{ role: 'user', content: BENCHMARK_PROMPT }]
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.TOGETHER_API_KEY}`,
+          'content-type': 'application/json'
+        },
+        responseType: 'stream',
+        timeout: 30000
+      }
+    );
+    return this._parseSSEStream(response.data, start);
+  }
+
+  _parseSSEStream(stream, start) {
+    return new Promise((resolve, reject) => {
+      let ttft = null;
+      let tokenCount = 0;
+      let buffer = '';
+
+      stream.on('data', (chunk) => {
+        if (ttft === null) {
+          ttft = Date.now() - start;
+        }
+        buffer += chunk.toString();
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep partial line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            // OpenAI / DeepSeek / Together format
+            const delta = parsed.choices?.[0]?.delta?.content;
+            // Google Gemini format
+            const googleText = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+            // Anthropic format
+            const anthropicDelta = parsed.delta?.text;
+
+            const text = delta || googleText || anthropicDelta || '';
+            // Approximate: 1 token per 4 chars
+            tokenCount += Math.max(1, Math.ceil(text.length / 4));
+          } catch (_) {
+            // Skip non-JSON lines (e.g. event: type)
+          }
+        }
+      });
+
+      stream.on('end', () => {
+        const end = Date.now();
+        const totalMs = end - start;
+        const generationMs = end - (start + (ttft || 0));
+        const throughput = generationMs > 0 ? (tokenCount / (generationMs / 1000)) : 0;
+
+        resolve({
+          ttft_ms: ttft || totalMs,
+          throughput_tps: Math.round(throughput),
+          measured: true
+        });
+      });
+
+      stream.on('error', reject);
+
+      // Safety timeout
+      setTimeout(() => {
+        stream.destroy();
+        if (ttft !== null) {
+          resolve({
+            ttft_ms: ttft,
+            throughput_tps: 0,
+            measured: true
+          });
+        } else {
+          reject(new Error('Stream timeout'));
+        }
+      }, 35000);
+    });
+  }
+
+  async measureAllModels() {
+    const results = {};
+
+    // Run all providers in parallel, models within each provider sequentially
+    const providerTasks = Object.entries(MODELS).map(async ([provider, models]) => {
+      const apiKeyVar = API_KEY_MAP[provider];
+      if (!process.env[apiKeyVar]) {
+        console.log(`Skipping ${provider}: ${apiKeyVar} not set`);
+        return;
+      }
+
+      for (const model of models) {
+        console.log(`Measuring ${model.name}...`);
+        await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
+
+        const result = await this.measureModelLatency(provider, model.id);
+        if (result) {
+          results[model.name] = result;
+          console.log(`  TTFT: ${result.ttft_ms}ms, Throughput: ${result.throughput_tps} tok/s`);
+        }
+      }
+    });
+
+    await Promise.all(providerTasks);
+    return results;
+  }
+
+  // ─── Data Collection ───────────────────────────────────────────────
+
   async collectLatencyData() {
     console.log('Collecting latency benchmarks...');
 
+    // Measure real latency for providers with API keys
+    this.latencyMeasurements = await this.measureAllModels();
+    console.log(`Measured ${Object.keys(this.latencyMeasurements).length} models`);
+
+    // Also fetch article mentions for metadata
     try {
       const lmsysArticles = await this.parseRSSFeed(RSS_FEEDS.lmsys);
       console.log(`Fetched ${lmsysArticles.length} LMSYS articles`);
-
       this.articleMentions = this.extractArticleMentions(lmsysArticles);
       console.log(`Found ${this.articleMentions.length} model mentions in articles`);
-
-      return this.articleMentions;
     } catch (error) {
-      console.error('Error collecting benchmarks:', error.message);
-      return [];
+      console.warn('RSS fetch failed:', error.message);
+      this.articleMentions = [];
     }
   }
 
@@ -150,7 +389,6 @@ class BenchmarkRunner {
       const litellmPricing = response.data;
       const costs = {};
 
-      // Map our model IDs to LiteLLM pricing keys
       const litellmKeyMap = {
         'Claude Sonnet 4': 'claude-sonnet-4-20250514',
         'Claude Opus 4': 'claude-opus-4-20250514',
@@ -177,7 +415,6 @@ class BenchmarkRunner {
 
       if (Object.keys(costs).length > 0) {
         console.log(`Fetched live pricing for ${Object.keys(costs).length} models from LiteLLM`);
-        // Merge with fallback for any missing models
         return { ...this._getFallbackCosts(), ...costs };
       }
     } catch (error) {
@@ -203,6 +440,8 @@ class BenchmarkRunner {
     };
   }
 
+  // ─── Results Formatting ────────────────────────────────────────────
+
   formatResults() {
     // Read existing seed data as base
     let data;
@@ -210,7 +449,6 @@ class BenchmarkRunner {
       const raw = fs.readFileSync(DATA_PATH, 'utf-8');
       data = JSON.parse(raw);
     } catch {
-      // No seed data yet — use hardcoded fallback
       data = {
         timestamp: new Date().toISOString(),
         models: Object.values(MODELS).flat().map(m => ({
@@ -227,10 +465,9 @@ class BenchmarkRunner {
       };
     }
 
-    // Update timestamp
     data.timestamp = new Date().toISOString();
 
-    // Apply collected cost data to models
+    // Apply cost data
     if (this.costs) {
       for (const model of data.models) {
         const cost = this.costs[model.name];
@@ -241,7 +478,19 @@ class BenchmarkRunner {
       }
     }
 
-    // Attach recent article mentions to models
+    // Apply real latency measurements (overwrite seed estimates)
+    for (const model of data.models) {
+      const measured = this.latencyMeasurements[model.name];
+      if (measured) {
+        model.ttft_ms = measured.ttft_ms;
+        model.throughput_tps = measured.throughput_tps;
+        model.data_source = 'measured';
+      } else {
+        model.data_source = 'estimate';
+      }
+    }
+
+    // Attach recent article mentions
     for (const model of data.models) {
       const mentions = this.articleMentions.filter(m => m.model === model.name);
       if (mentions.length > 0) {
@@ -256,76 +505,59 @@ class BenchmarkRunner {
     return data;
   }
 
+  // ─── Persistence ───────────────────────────────────────────────────
+
   saveResults(results) {
-    const dir = path.dirname(DATA_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    try {
+      const dir = path.dirname(DATA_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(DATA_PATH, JSON.stringify(results, null, 2));
+      console.log(`Saved results to ${DATA_PATH}`);
+    } catch (error) {
+      console.warn('Could not write to filesystem (read-only?):', error.message);
     }
-    fs.writeFileSync(DATA_PATH, JSON.stringify(results, null, 2));
-    console.log(`Saved results to ${DATA_PATH}`);
   }
+
+  async saveResultsToDatabase(results) {
+    try {
+      for (const model of results.models) {
+        const modelId = model.provider + '/' + model.name.toLowerCase().replace(/\s+/g, '-');
+
+        await this.db.addModel({
+          id: modelId,
+          name: model.name,
+          provider: model.provider
+        });
+
+        await this.db.addBenchmark(modelId, 'latency', model.ttft_ms, 'ms', 'benchmark-runner');
+        await this.db.addBenchmark(modelId, 'throughput', model.throughput_tps, 'tokens/sec', 'benchmark-runner');
+        await this.db.addPricing(modelId, model.provider, model.cost_input_1m, model.cost_output_1m, new Date().toISOString().split('T')[0]);
+      }
+      console.log('Results saved to database');
+    } catch (error) {
+      console.error('Error saving to database:', error.message);
+    }
+  }
+
+  // ─── Main Pipeline ─────────────────────────────────────────────────
 
   async run() {
     console.log('\nRunning LLM Benchmarks...\n');
 
-    // Initialize database
     await this.initDatabase();
-
     await this.collectLatencyData();
     this.costs = await this.collectCostData();
 
     const results = this.formatResults();
     this.lastUpdated = results.timestamp;
 
-    // Save to both JSON file and database
     this.saveResults(results);
     await this.saveResultsToDatabase(results);
 
     console.log('\nBenchmarks complete');
     return results;
-  }
-
-  async saveResultsToDatabase(results) {
-    try {
-      for (const model of results.models) {
-        // Add/update model
-        this.db.addModel({
-          id: model.provider + '/' + model.name.toLowerCase().replace(/\s+/g, '-'),
-          name: model.name,
-          provider: model.provider
-        });
-
-        // Add latency benchmark
-        this.db.addBenchmark(
-          model.provider + '/' + model.name.toLowerCase().replace(/\s+/g, '-'),
-          'latency',
-          model.ttft_ms,
-          'ms',
-          'benchmark-runner'
-        );
-
-        // Add throughput benchmark
-        this.db.addBenchmark(
-          model.provider + '/' + model.name.toLowerCase().replace(/\s+/g, '-'),
-          'throughput',
-          model.throughput_tps,
-          'tokens/sec',
-          'benchmark-runner'
-        );
-
-        // Add pricing
-        this.db.addPricing(
-          model.provider + '/' + model.name.toLowerCase().replace(/\s+/g, '-'),
-          model.provider,
-          model.cost_input_1m,
-          model.cost_output_1m,
-          new Date().toISOString().split('T')[0]
-        );
-      }
-      console.log('✅ Results saved to database');
-    } catch (error) {
-      console.error('Error saving to database:', error.message);
-    }
   }
 }
 

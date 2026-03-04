@@ -72,8 +72,10 @@ export default function BenchmarkChart({ models }) {
             name={provider}
             data={models.filter(m => m.provider === provider)}
             fill={PROVIDER_COLORS[provider] || '#6b7280'}
-            shape="circle"
-            r={8}
+            shape={(props) => {
+              const { cx, cy, fill } = props;
+              return <circle cx={cx} cy={cy} r={8} fill={fill} opacity={0.85} />;
+            }}
           />
         ))}
       </ScatterChart>
