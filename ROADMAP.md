@@ -14,58 +14,39 @@
 - [x] Cron endpoint for scheduled updates
 - [x] Model list updated to current models (Claude 4, GPT-4.1, Gemini 2.5, etc.)
 
-### Week 2 - IN PROGRESS
-- [ ] Real latency measurement (send prompts to provider APIs, measure TTFT)
-- [ ] Deploy to Vercel
-- [ ] Replace better-sqlite3 with Vercel-compatible storage
-- [ ] Fix cron data flow for serverless (read-only filesystem)
-- [ ] Add test coverage
-- [ ] Public dashboard live
+### Week 2 - DONE
+- [x] Real latency measurement (streaming API calls, measure TTFT + throughput)
+- [x] Docker local dev environment (Dockerfile, docker-compose.yml)
+- [x] Add test coverage (51 tests across 7 suites)
+- [x] Fix 6 bugs (auth bypass, LEFT JOIN, cold-start, chart props, etc.)
+- [x] Dual database backend (Turso + better-sqlite3) for Vercel deploy
+- [x] Cron endpoint supports CRON_SECRET (Vercel) + CRON_AUTH_TOKEN
 
-## Phase 2: API & Monetization (Weeks 3-4)
+## Phase 2: API & Monetization (Weeks 3-4) - DONE
 
-### Week 3
-- [ ] API docs (Swagger/OpenAPI)
-- [ ] Rate limiting
-- [ ] API input validation
-- [ ] `/api/v1/compare` endpoint
+### Week 3 - DONE
+- [x] Rate limiting (100 req/min public, 1000 req/min premium, configurable via env)
+- [x] API input validation (sort, limit, latency_target, budget)
+- [x] `/api/v1/compare` endpoint
+- [x] ESLint configuration
+- [x] API docs (OpenAPI 3.0 spec + Swagger UI at `/docs`)
 
-### Week 4
-- [ ] Stripe integration
-- [ ] API key generation
-- [ ] Usage tracking & billing
-- [ ] Premium tier launch
+### Week 4 - DONE
+- [x] Stripe integration (checkout session + webhook lifecycle)
+- [x] API key generation (`llmb_` prefixed, stored in DB)
+- [x] API key authentication (premium vs public rate limits)
+- [x] Premium tier gating on all API routes
 
 ## Phase 3: Polish & Growth (Weeks 5+)
 
+- [ ] Deploy to Vercel (set TURSO_DATABASE_URL, STRIPE keys, CRON_SECRET)
+- [ ] Public dashboard live
 - [ ] Webhooks for alerts
 - [ ] Historical data trending charts
 - [ ] Advanced filtering
 - [ ] Admin dashboard
 - [ ] Email notifications
 - [ ] Blog posts & SEO
-
-## Current Priorities
-
-1. **URGENT:** Real latency measurement
-   - Send standardized prompts to provider APIs
-   - Measure TTFT and throughput via streaming
-   - Replace static seed data with actual measurements
-
-2. **URGENT:** Vercel deployment
-   - Replace better-sqlite3 (native addon incompatible with serverless)
-   - Fix cron to write to remote storage instead of filesystem
-   - Fix ISR data flow for `getStaticProps`
-
-3. **HIGH:** Test coverage
-   - Benchmark runner tests (RSS parsing, model matching, formatResults)
-   - Database CRUD tests
-   - API endpoint tests
-
-4. **MEDIUM:** API hardening
-   - Input validation on query parameters
-   - Rate limiting
-   - ESLint configuration
 
 ## Success Metrics
 
@@ -76,11 +57,13 @@
 
 ## Known Issues & TODOs
 
-- [ ] TTFT/throughput values are placeholder estimates, not measured
-- [ ] better-sqlite3 incompatible with Vercel serverless
-- [ ] Cron writes to read-only filesystem on Vercel
-- [ ] Rate limiting not yet implemented
-- [ ] Stripe API not integrated
-- [ ] No user authentication yet
-- [ ] API documentation incomplete
-- [ ] Zero test coverage
+- [x] ~~TTFT/throughput values are placeholder estimates~~ Real measurement implemented
+- [x] ~~better-sqlite3 incompatible with Vercel serverless~~ Dual backend: Turso (remote) + better-sqlite3 (local)
+- [x] ~~Cron writes to read-only filesystem on Vercel~~ saveResults() graceful on read-only FS
+- [x] ~~Rate limiting not yet implemented~~ Done (in-memory, tiered)
+- [x] ~~Stripe API not integrated~~ Checkout + webhook + API key gating done
+- [x] ~~No user authentication yet~~ API key auth with premium/public tiers
+- [x] ~~API documentation incomplete~~ OpenAPI 3.0 + Swagger UI
+- [x] ~~Zero test coverage~~ 51 tests passing across 7 suites
+- [ ] Stripe in test mode — needs production keys for launch
+- [ ] Turso database not yet provisioned — need `turso db create` + set env vars

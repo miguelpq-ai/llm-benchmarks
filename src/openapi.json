@@ -1,0 +1,228 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "LLM Benchmarks API",
+    "description": "Real-time LLM performance and cost benchmarks. Compare latency, throughput, and pricing across Claude, GPT, Gemini, DeepSeek, and more.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "LLM Benchmarks",
+      "url": "https://llm-benchmarks.dev"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "API v1"
+    }
+  ],
+  "paths": {
+    "/models": {
+      "get": {
+        "summary": "List benchmarked models",
+        "description": "Returns all benchmarked LLM models sorted by the specified metric.",
+        "operationId": "getModels",
+        "parameters": [
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort metric",
+            "schema": {
+              "type": "string",
+              "enum": ["latency", "cost", "throughput"],
+              "default": "latency"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of models to return (1-100)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "models": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Model" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/best-model": {
+      "get": {
+        "summary": "Find the best model for constraints",
+        "description": "Returns the optimal model given latency and/or budget constraints.",
+        "operationId": "getBestModel",
+        "parameters": [
+          {
+            "name": "latency_target",
+            "in": "query",
+            "description": "Maximum acceptable TTFT in milliseconds",
+            "schema": { "type": "number", "minimum": 0 }
+          },
+          {
+            "name": "budget",
+            "in": "query",
+            "description": "Maximum output cost per 1M tokens (USD)",
+            "schema": { "type": "number", "minimum": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Best matching model",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Model" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": {
+            "description": "No model matches constraints",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/compare": {
+      "get": {
+        "summary": "Compare specific models",
+        "description": "Side-by-side comparison of two or more models by name.",
+        "operationId": "compareModels",
+        "parameters": [
+          {
+            "name": "models",
+            "in": "query",
+            "required": true,
+            "description": "Comma-separated model names (minimum 2)",
+            "schema": { "type": "string" },
+            "example": "Claude 4 Sonnet,GPT-4.1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comparison results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "models": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Model" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": {
+            "description": "No matching models found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/Error" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "available": {
+                          "type": "array",
+                          "items": { "type": "string" },
+                          "description": "List of available model names"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Model": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "example": "Claude 4 Sonnet" },
+          "provider": { "type": "string", "example": "anthropic" },
+          "id": { "type": "string", "example": "claude-sonnet-4-20250514" },
+          "ttft_ms": { "type": "number", "description": "Time to first token (ms)", "example": 320 },
+          "throughput_tps": { "type": "number", "description": "Tokens per second", "example": 95 },
+          "cost_input_1m": { "type": "number", "description": "Input cost per 1M tokens (USD)", "example": 3 },
+          "cost_output_1m": { "type": "number", "description": "Output cost per 1M tokens (USD)", "example": 15 },
+          "json_support": { "type": "boolean", "example": true },
+          "data_source": { "type": "string", "enum": ["measured", "estimate"], "example": "measured" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request parameters",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded (100 req/min public, 1000 req/min premium)",
+        "headers": {
+          "X-RateLimit-Limit": { "schema": { "type": "integer" } },
+          "X-RateLimit-Remaining": { "schema": { "type": "integer" } },
+          "X-RateLimit-Reset": { "schema": { "type": "integer" } }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Optional API key for premium rate limits. Public access is available without a key."
+      }
+    }
+  },
+  "security": [
+    {},
+    { "ApiKeyAuth": [] }
+  ]
+}

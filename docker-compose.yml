@@ -1,0 +1,21 @@
+services:
+  app:
+    build:
+      context: .
+      target: development
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount source for hot-reload
+      - .:/app
+      # Preserve container's node_modules (native bindings compiled for Linux)
+      - /app/node_modules
+      # Preserve Next.js build cache
+      - /app/.next
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+      - NEXT_TELEMETRY_DISABLED=1
+    restart: unless-stopped

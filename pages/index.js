@@ -4,6 +4,7 @@ import Head from 'next/head';
 import dynamic from 'next/dynamic';
 import ModelCard from '../components/ModelCard';
 import ComparisonTable from '../components/ComparisonTable';
+import Database from '../src/db';
 
 const BenchmarkChart = dynamic(() => import('../components/BenchmarkChart'), {
   ssr: false,
@@ -26,15 +27,44 @@ function timeAgo(timestamp) {
 }
 
 export async function getStaticProps() {
-  const dataPath = path.join(process.cwd(), 'src', 'data', 'models.json');
-
   let data = { timestamp: null, models: [] };
 
+  // Try loading from database (Turso in production, SQLite locally)
   try {
-    const raw = fs.readFileSync(dataPath, 'utf-8');
-    data = JSON.parse(raw);
-  } catch {
-    // data.json doesn't exist yet — return empty state
+    const db = new Database();
+    await db.init();
+    const rows = await db.getModelsWithBenchmarks();
+    db.close();
+
+    if (rows && rows.length > 0) {
+      data = {
+        timestamp: new Date().toISOString(),
+        models: rows.map(row => ({
+          name: row.name,
+          provider: row.provider,
+          id: row.id,
+          ttft_ms: row.ttft_ms || 100,
+          throughput_tps: row.throughput_tps || 80,
+          cost_input_1m: row.cost_input_1m || 1,
+          cost_output_1m: row.cost_output_1m || 5,
+          json_support: true,
+          data_source: row.ttft_ms ? 'measured' : 'estimate',
+        })),
+      };
+    }
+  } catch (err) {
+    console.warn('DB load failed in getStaticProps, falling back to file:', err.message);
+  }
+
+  // Fall back to seed JSON file
+  if (data.models.length === 0) {
+    try {
+      const dataPath = path.join(process.cwd(), 'src', 'data', 'models.json');
+      const raw = fs.readFileSync(dataPath, 'utf-8');
+      data = JSON.parse(raw);
+    } catch {
+      // models.json doesn't exist yet — return empty state
+    }
   }
 
   return {
